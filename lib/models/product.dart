@@ -23,7 +23,7 @@ class Product {
   Product({
     this.id, required this.name, required this.sku, this.description,
     required this.brandId, required this.categoryId, this.subcategoryId, this.typeId,
-    this.isActive = true, this.isTintable = false, this.isTaxInclusive = false, this.taxRemittable = true, this.hsnCode, this.createdAt,
+    this.isActive = true, this.isTintable = false, this.isTaxInclusive = true, this.taxRemittable = true, this.hsnCode, this.createdAt,
     this.brandName, this.categoryName, this.subcategoryName, this.typeName, this.variantCount = 0,
   });
 
@@ -38,7 +38,7 @@ class Product {
     typeId: map['type_id'] != null ? int.tryParse(map['type_id']!) : null,
     isActive: map['is_active'] != '0',
     isTintable: map['is_tintable'] == '1',
-    isTaxInclusive: map['is_tax_inclusive'] == '1',
+    isTaxInclusive: map['is_tax_inclusive'] != '0',
     taxRemittable: map['tax_remittable'] != '0',
     hsnCode: map['hsn_code'],
     createdAt: map['created_at'] != null ? DateTime.tryParse(map['created_at']!) : null,

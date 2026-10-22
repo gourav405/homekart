@@ -10,7 +10,7 @@ class ProductService {
   final DatabaseService _db = DatabaseService();
 
   // ── Products ──
-  Future<(List<Product>, int)> getAllProducts({String? search, int? brandId, int? categoryId, int limit = 20, int offset = 0}) async {
+  Future<(List<Product>, int)> getAllProducts({String? search, int? brandId, int? categoryId, int? subcategoryId, int limit = 20, int offset = 0}) async {
     String countSql = 'SELECT COUNT(*) as total FROM products p WHERE 1=1';
     String sql = 'SELECT p.*, p.hsn_code as hsn_code, b.name as brand_name, c.name as category_name, sc.name as subcategory_name, pt.name as type_name, (SELECT COUNT(*) FROM product_variants pv WHERE pv.product_id = p.id) as variant_count FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN subcategories sc ON p.subcategory_id = sc.id LEFT JOIN product_types pt ON p.type_id = pt.id WHERE 1=1';
     String whereClause = '';
@@ -18,6 +18,7 @@ class ProductService {
     if (search != null && search.isNotEmpty) { whereClause += ' AND (p.name LIKE :s OR p.sku LIKE :s OR EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id AND (pv.sku LIKE :s OR pv.variant_name LIKE :s)))'; params['s'] = '%$search%'; }
     if (brandId != null) { whereClause += ' AND p.brand_id = :bid'; params['bid'] = brandId; }
     if (categoryId != null) { whereClause += ' AND p.category_id = :cid'; params['cid'] = categoryId; }
+    if (subcategoryId != null) { whereClause += ' AND p.subcategory_id = :sid'; params['sid'] = subcategoryId; }
     
     final countR = await _db.query(countSql + whereClause, params);
     final total = int.parse(countR.rows.first.assoc()['total']!);
@@ -29,6 +30,11 @@ class ProductService {
     final r = await _db.query(sql, params);
     final products = r.rows.map((row) => Product.fromMap(row.assoc())).toList();
     return (products, total);
+  }
+
+  Future<List<Product>> getProductList() async {
+    final r = await _db.query('SELECT p.*, p.hsn_code as hsn_code, b.name as brand_name, c.name as category_name, sc.name as subcategory_name, pt.name as type_name, 0 as variant_count FROM products p LEFT JOIN brands b ON p.brand_id = b.id LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN subcategories sc ON p.subcategory_id = sc.id LEFT JOIN product_types pt ON p.type_id = pt.id WHERE p.is_active = 1 ORDER BY p.name');
+    return r.rows.map((row) => Product.fromMap(row.assoc())).toList();
   }
 
   Future<int> createProduct(Product p) async {
@@ -49,13 +55,14 @@ class ProductService {
   Future<void> deleteProduct(int id) async { await _db.query('DELETE FROM products WHERE id=:id', {'id': id}); }
 
   // ── Variants ──
-  Future<(List<ProductVariant>, int)> getVariants({int? productId, int? brandId, int? categoryId, String? search, bool? isActive, int limit = 20, int offset = 0}) async {
+  Future<(List<ProductVariant>, int)> getVariants({int? productId, int? brandId, int? categoryId, int? subcategoryId, String? search, bool? isActive, int limit = 20, int offset = 0}) async {
     String countSql = 'SELECT COUNT(DISTINCT pv.sku) as total FROM product_variants pv JOIN products p ON pv.product_id = p.id WHERE 1=1';
     String whereClause = '';
     Map<String, dynamic> params = {};
     if (productId != null) { whereClause += ' AND pv.product_id = :pid'; params['pid'] = productId; }
     if (brandId != null) { whereClause += ' AND p.brand_id = :bid'; params['bid'] = brandId; }
     if (categoryId != null) { whereClause += ' AND p.category_id = :cid'; params['cid'] = categoryId; }
+    if (subcategoryId != null) { whereClause += ' AND p.subcategory_id = :sid'; params['sid'] = subcategoryId; }
     if (isActive != null) { whereClause += ' AND pv.is_active = :act AND p.is_active = :act'; params['act'] = isActive ? 1 : 0; }
     if (search != null && search.isNotEmpty) { whereClause += ' AND (pv.sku LIKE :s OR p.name LIKE :s OR pv.variant_name LIKE :s)'; params['s'] = '%$search%'; }
     
@@ -82,14 +89,14 @@ class ProductService {
   }
 
   Future<int> createVariant(ProductVariant v) async {
-    final r = await _db.query('INSERT INTO product_variants (product_id, unit_id, pack_size, sku, variant_name, barcode, purchase_price, selling_price, mrp, color_id, tax_rate_id, purchase_unit_id, conversion_factor, is_active) VALUES (:pid, :uid, :ps, :sku, :vname, :bar, :pp, :sp, :mrp, :cid, :tid, :puid, :cf, :act)', {'pid': v.productId, 'uid': v.unitId, 'ps': v.packSize, 'sku': v.sku, 'vname': v.variantName, 'bar': v.barcode, 'pp': v.purchasePrice, 'sp': v.sellingPrice, 'mrp': v.mrp, 'cid': v.colorId, 'tid': v.taxRateId, 'puid': v.purchaseUnitId, 'cf': v.conversionFactor, 'act': v.isActive ? 1 : 0});
+    final r = await _db.query('INSERT INTO product_variants (product_id, unit_id, pack_size, sku, variant_name, barcode, purchase_price, selling_price, mrp, color_id, tax_rate_id, purchase_unit_id, conversion_factor, is_active) VALUES (:pid, :uid, :ps, :sku, :vname, :bar, :pp, :sp, :mrp, :cid, :tid, :puid, :cf, :act)', {'pid': v.productId, 'uid': v.unitId, 'ps': v.packSize, 'sku': v.sku, 'vname': v.variantName, 'bar': v.barcode, 'pp': v.purchasePrice, 'sp': v.sellingPrice, 'mrp': v.mrp, 'cid': v.colorId, 'tid': v.taxRateId ?? 3, 'puid': v.purchaseUnitId, 'cf': v.conversionFactor, 'act': v.isActive ? 1 : 0});
     int variantId = r.lastInsertID.toInt();
     await _db.query('INSERT INTO inventory (product_variant_id, quantity, minimum_stock, maximum_stock) VALUES (:vid, 0, :min, :max)', {'vid': variantId, 'min': v.minStock ?? 0, 'max': v.maxStock ?? 0});
     return variantId;
   }
 
   Future<void> updateVariant(ProductVariant v) async {
-    await _db.query('UPDATE product_variants SET unit_id=:uid, pack_size=:ps, sku=:sku, variant_name=:vname, barcode=:bar, purchase_price=:pp, selling_price=:sp, mrp=:mrp, color_id=:cid, tax_rate_id=:tid, purchase_unit_id=:puid, conversion_factor=:cf, is_active=:act, updated_at=NOW() WHERE id=:id', {'id': v.id, 'uid': v.unitId, 'ps': v.packSize, 'sku': v.sku, 'vname': v.variantName, 'bar': v.barcode, 'pp': v.purchasePrice, 'sp': v.sellingPrice, 'mrp': v.mrp, 'cid': v.colorId, 'tid': v.taxRateId, 'puid': v.purchaseUnitId, 'cf': v.conversionFactor, 'act': v.isActive ? 1 : 0});
+    await _db.query('UPDATE product_variants SET unit_id=:uid, pack_size=:ps, sku=:sku, variant_name=:vname, barcode=:bar, purchase_price=:pp, selling_price=:sp, mrp=:mrp, color_id=:cid, tax_rate_id=:tid, purchase_unit_id=:puid, conversion_factor=:cf, is_active=:act, updated_at=NOW() WHERE id=:id', {'id': v.id, 'uid': v.unitId, 'ps': v.packSize, 'sku': v.sku, 'vname': v.variantName, 'bar': v.barcode, 'pp': v.purchasePrice, 'sp': v.sellingPrice, 'mrp': v.mrp, 'cid': v.colorId, 'tid': v.taxRateId ?? 3, 'puid': v.purchaseUnitId, 'cf': v.conversionFactor, 'act': v.isActive ? 1 : 0});
     await _db.query('UPDATE inventory SET minimum_stock=:min, maximum_stock=:max WHERE product_variant_id=:id', {'id': v.id, 'min': v.minStock ?? 0, 'max': v.maxStock ?? 0});
   }
 

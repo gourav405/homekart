@@ -19,27 +19,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
   MarginReport? _report;
   bool _isLoading = true;
   String _groupByMode = 'date';
+  int _selectedFiscalYear = 2026;
+  int? _selectedMonth;
 
   @override
   void initState() {
     super.initState();
-    _setThisMonth();
+    final now = DateTime.now();
+    _selectedFiscalYear = now.month >= 4 ? now.year : now.year - 1;
+    _selectedMonth = now.month;
+    _applyYearAndMonth();
   }
 
-  void _setThisMonth() {
-    final now = DateTime.now();
-    _startDate = DateTime(now.year, now.month, 1);
-    _endDate = DateTime(now.year, now.month + 1, 0);
+  void _applyYearAndMonth() {
     _invoiceController.clear();
-    _loadData();
-  }
-
-  void _setThisYear() {
-    final now = DateTime.now();
-    int startYear = now.month >= 4 ? now.year : now.year - 1;
-    _startDate = DateTime(startYear, 4, 1);
-    _endDate = DateTime(startYear + 1, 3, 31);
-    _invoiceController.clear();
+    final y = _selectedFiscalYear;
+    if (_selectedMonth == null) {
+      _startDate = DateTime(y, 4, 1);
+      _endDate = DateTime(y + 1, 3, 31);
+    } else {
+      final m = _selectedMonth!;
+      final year = m >= 4 ? y : y + 1;
+      _startDate = DateTime(year, m, 1);
+      _endDate = DateTime(year, m + 1, 0);
+    }
     _loadData();
   }
 
@@ -56,6 +59,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       setState(() {
         _startDate = range.start;
         _endDate = range.end;
+        _selectedMonth = null;
         _invoiceController.clear();
       });
       _loadData();
@@ -70,7 +74,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       });
       _loadData();
     } else {
-      _setThisMonth();
+      _applyYearAndMonth();
     }
   }
 
@@ -129,36 +133,68 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _fmt(double v) =>
       NumberFormat.currency(locale: 'en_IN', symbol: '₹').format(v);
 
-  Widget _buildStatCard(String title, String value, Color color) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    Color color, {
+    IconData? icon,
+    String? subtitle,
+    bool isHighlight = false,
+  }) {
     return Expanded(
       child: Card(
-        elevation: 0,
+        elevation: isHighlight ? 2 : 0,
+        color: isHighlight ? color.withValues(alpha: 0.04) : Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.grey.shade200),
+          side: BorderSide(
+            color: isHighlight ? color.withValues(alpha: 0.4) : Colors.grey.shade200,
+            width: isHighlight ? 1.5 : 1.0,
+          ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w600,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (icon != null)
+                    Icon(icon, size: 18, color: color),
+                ],
               ),
               const SizedBox(height: 8),
               Text(
                 value,
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
                   color: color,
                 ),
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: color.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -172,167 +208,290 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (_invoiceController.text.isNotEmpty) {
       currentFilterText =
           'Showing margins for Invoice: ${_invoiceController.text}';
+    } else if (_selectedMonth != null && _startDate != null) {
+      currentFilterText =
+          'Showing figures for ${DateFormat('MMMM yyyy').format(_startDate!)} (FY $_selectedFiscalYear-${(_selectedFiscalYear + 1).toString().substring(2)})';
     } else if (_startDate != null && _endDate != null) {
       currentFilterText =
-          'Showing margins from ${DateFormat('dd MMM yyyy').format(_startDate!)} to ${DateFormat('dd MMM yyyy').format(_endDate!)}';
+          'Showing figures for FY $_selectedFiscalYear-${(_selectedFiscalYear + 1).toString().substring(2)} (from ${DateFormat('dd MMM yyyy').format(_startDate!)} to ${DateFormat('dd MMM yyyy').format(_endDate!)})';
     }
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text('Financial & Margin Reports'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Column(
-        children: [
-          // Filter Bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _pickDateRange,
-                  icon: const Icon(Icons.calendar_month, size: 18),
-                  label: const Text('Custom Date Range'),
-                ),
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: _setThisMonth,
-                  child: const Text('This Month'),
-                ),
-                TextButton(
-                  onPressed: _setThisYear,
-                  child: const Text('Current FY'),
-                ),
-                const SizedBox(width: 24),
-                FilledButton.icon(
-                  onPressed: _exportGstReport,
-                  icon: const Icon(Icons.file_download, size: 18),
-                  label: const Text('Export GST Report for CA'),
-                  style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-                ),
-                const SizedBox(width: 24),
-                const Text(
-                  'Group By: ',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'date',
-                      label: Text('Date'),
-                      icon: Icon(Icons.calendar_today, size: 16),
-                    ),
-                    ButtonSegment(
-                      value: 'product',
-                      label: Text('Product'),
-                      icon: Icon(Icons.inventory_2, size: 16),
-                    ),
-                    ButtonSegment(
-                      value: 'invoice',
-                      label: Text('Invoice'),
-                      icon: Icon(Icons.receipt_long, size: 16),
-                    ),
-                  ],
-                  selected: {_groupByMode},
-                  onSelectionChanged: (val) {
-                    setState(() => _groupByMode = val.first);
-                    _loadData();
-                  },
-                  style: SegmentedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    textStyle: const TextStyle(fontSize: 12),
-                  ),
-                ),
-                const Spacer(),
-                SizedBox(
-                  width: 300,
-                  child: TextField(
-                    controller: _invoiceController,
-                    decoration: InputDecoration(
-                      hintText: 'Search Invoice # (e.g. INV-123)',
-                      prefixIcon: const Icon(Icons.search, size: 18),
-                      suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: _invoiceController,
-                        builder: (context, value, child) {
-                          return value.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 18),
-                                  onPressed: () {
-                                    _invoiceController.clear();
-                                    _searchInvoice();
-                                  },
-                                )
-                              : IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_forward,
-                                    size: 18,
-                                  ),
-                                  onPressed: _searchInvoice,
-                                );
-                        },
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Standard Top Header: Title on Left, Filters right-aligned on Right
+            SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 16,
+                runSpacing: 12,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Financial & Margin Reports',
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      isDense: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onSubmitted: (_) => _searchInvoice(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(height: 1, color: Colors.grey[200]),
-
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _report == null
-                ? const Center(child: Text('Failed to load report'))
-                : Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                      if (currentFilterText.isNotEmpty) ...[
+                        const SizedBox(height: 4),
                         Text(
                           currentFilterText,
                           style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[700],
+                            fontSize: 13,
+                            color: Colors.grey[600],
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                      ],
+                    ],
+                  ),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.end,
+                    children: [
+                      SizedBox(
+                        width: 140,
+                        height: 48,
+                        child: DropdownButtonFormField<int>(
+                          isExpanded: true,
+                          value: _selectedFiscalYear,
+                          decoration: InputDecoration(
+                            labelText: 'Fiscal Year',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                          items: [2024, 2025, 2026, 2027, 2028].map((y) {
+                            return DropdownMenuItem(
+                              value: y,
+                              child: Text('FY $y-${(y + 1).toString().substring(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                            );
+                          }).toList(),
+                          onChanged: (y) {
+                            if (y != null) {
+                              setState(() {
+                                _selectedFiscalYear = y;
+                                _applyYearAndMonth();
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 180,
+                        height: 48,
+                        child: DropdownButtonFormField<int?>(
+                          isExpanded: true,
+                          value: _selectedMonth,
+                          decoration: InputDecoration(
+                            labelText: 'Month',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('All Months (Full FY)', style: TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 4, child: Text('Apr $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 5, child: Text('May $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 6, child: Text('Jun $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 7, child: Text('Jul $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 8, child: Text('Aug $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 9, child: Text('Sep $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 10, child: Text('Oct $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 11, child: Text('Nov $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 12, child: Text('Dec $_selectedFiscalYear', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 1, child: Text('Jan ${_selectedFiscalYear + 1}', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 2, child: Text('Feb ${_selectedFiscalYear + 1}', style: const TextStyle(fontSize: 13))),
+                            DropdownMenuItem(value: 3, child: Text('Mar ${_selectedFiscalYear + 1}', style: const TextStyle(fontSize: 13))),
+                          ],
+                          onChanged: (m) {
+                            setState(() {
+                              _selectedMonth = m;
+                              _applyYearAndMonth();
+                            });
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 160,
+                        height: 48,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _groupByMode,
+                          decoration: InputDecoration(
+                            labelText: 'Group By',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'date',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.calendar_today, size: 14, color: Colors.grey),
+                                  SizedBox(width: 8),
+                                  Text('By Date', style: TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'product',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.inventory_2_outlined, size: 14, color: Colors.grey),
+                                  SizedBox(width: 8),
+                                  Text('By Product', style: TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'invoice',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.receipt_long_outlined, size: 14, color: Colors.grey),
+                                  SizedBox(width: 8),
+                                  Text('By Invoice', style: TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _groupByMode = val);
+                              _loadData();
+                            }
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: _pickDateRange,
+                          icon: const Icon(Icons.calendar_month, size: 18),
+                          label: const Text('Custom Range', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            side: BorderSide(color: Colors.grey.shade400),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        height: 48,
+                        child: FilledButton.icon(
+                          onPressed: _exportGstReport,
+                          icon: const Icon(Icons.file_download, size: 18),
+                          label: const Text('Export GST for CA', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 250,
+                        height: 48,
+                        child: TextField(
+                          controller: _invoiceController,
+                          decoration: InputDecoration(
+                            hintText: 'Search Invoice #...',
+                            prefixIcon: const Icon(Icons.search, size: 18),
+                            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _invoiceController,
+                              builder: (context, value, child) {
+                                return value.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 18),
+                                        onPressed: () {
+                                          _invoiceController.clear();
+                                          _searchInvoice();
+                                        },
+                                      )
+                                    : IconButton(
+                                        icon: const Icon(
+                                          Icons.arrow_forward,
+                                          size: 18,
+                                        ),
+                                        onPressed: _searchInvoice,
+                                      );
+                              },
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onSubmitted: (_) => _searchInvoice(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _report == null
+                  ? const Center(child: Text('Failed to load report'))
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Row(
                           children: [
                             _buildStatCard(
-                              'Net Revenue (No Tax)',
+                              'Net Revenue',
                               _fmt(_report!.netRevenue),
                               Colors.blue[700]!,
+                              icon: Icons.point_of_sale,
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 12),
                             _buildStatCard(
                               'Cost of Goods (COGS)',
                               _fmt(_report!.totalCost),
                               Colors.orange[700]!,
+                              icon: Icons.inventory_2,
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 12),
                             _buildStatCard(
                               'Gross Profit',
                               _fmt(_report!.grossProfit),
-                              Colors.green[700]!,
+                              _report!.grossProfit >= 0 ? const Color(0xFF2E7D32) : Colors.red[700]!,
+                              icon: Icons.trending_up,
+                              subtitle: '${_report!.marginPercent.toStringAsFixed(1)}% margin',
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 12),
                             _buildStatCard(
-                              'Average Margin %',
-                              '${_report!.marginPercent.toStringAsFixed(2)}%',
-                              Colors.purple[700]!,
+                              'Operating Expenses',
+                              _fmt(_report!.totalExpenses),
+                              Colors.deepOrange[700]!,
+                              icon: Icons.receipt_long,
+                            ),
+                            const SizedBox(width: 12),
+                            _buildStatCard(
+                              _report!.netProfit >= 0 ? 'Net Total Profit' : 'Net Total Loss',
+                              _fmt(_report!.netProfit),
+                              _report!.netProfit >= 0 ? const Color(0xFF1B5E20) : const Color(0xFFC62828),
+                              icon: _report!.netProfit >= 0 ? Icons.monetization_on : Icons.warning_amber_rounded,
+                              subtitle: '${_report!.netMarginPercent.toStringAsFixed(1)}% net margin',
+                              isHighlight: true,
                             ),
                           ],
                         ),
@@ -382,6 +541,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       label: Text('Gross Profit'),
                                       numeric: true,
                                     ),
+                                    if (_groupByMode == 'date') ...[
+                                      const DataColumn(
+                                        label: Text('Expenses'),
+                                        numeric: true,
+                                      ),
+                                      const DataColumn(
+                                        label: Text('Net Profit / (Loss)'),
+                                        numeric: true,
+                                      ),
+                                    ],
                                     const DataColumn(
                                       label: Text('Margin %'),
                                       numeric: true,
@@ -432,12 +601,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         DataCell(
                                           Text(
                                             _fmt(r.grossProfit),
-                                            style: const TextStyle(
-                                              color: Colors.green,
-                                              fontWeight: FontWeight.bold,
+                                            style: TextStyle(
+                                              color: r.grossProfit >= 0
+                                                  ? const Color(0xFF2E7D32)
+                                                  : Colors.red[700],
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                         ),
+                                        if (_groupByMode == 'date') ...[
+                                          DataCell(
+                                            Text(
+                                              _fmt(r.expenses),
+                                              style: TextStyle(
+                                                color: r.expenses > 0
+                                                    ? Colors.deepOrange[700]
+                                                    : null,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              _fmt(r.netProfit),
+                                              style: TextStyle(
+                                                color: r.netProfit >= 0
+                                                    ? const Color(0xFF1B5E20)
+                                                    : const Color(0xFFC62828),
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                         DataCell(
                                           Text(
                                             '${r.marginPercent.toStringAsFixed(1)}%',
@@ -453,9 +647,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                       ],
                     ),
-                  ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

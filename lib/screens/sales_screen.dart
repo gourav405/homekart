@@ -170,9 +170,12 @@ class _SalesScreenState extends State<SalesScreen> {
                   subtitle: 'Create your first sale',
                 )
               : Card(
+                  clipBehavior: Clip.antiAlias,
                   child: SizedBox(
                     width: double.infinity,
-                    child: DataTable(
+                    child: ListView(
+                      children: [
+                        DataTable(
                       columns: const [
                         DataColumn(label: Text('Invoice')),
                         DataColumn(label: Text('Customer')),
@@ -356,6 +359,8 @@ class _SalesScreenState extends State<SalesScreen> {
                             ),
                           )
                           .toList(),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -399,6 +404,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(children: [
                               Expanded(
@@ -423,26 +429,40 @@ class _SalesScreenState extends State<SalesScreen> {
                                   },
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              // Category filter chips
-                              ...([null, ...categories]).map((cat) {
-                                final isAll = cat == null;
-                                final label = isAll ? 'All' : cat.name;
-                                final isSelected = _selectedCategoryFilter == (isAll ? null : cat.name);
-                                return Padding(
-                                  padding: const EdgeInsets.only(left: 4),
-                                  child: ChoiceChip(
-                                    label: Text(label, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : blue)),
-                                    selected: isSelected,
-                                    selectedColor: blue,
-                                    backgroundColor: Colors.white,
-                                    side: BorderSide(color: isSelected ? blue : Colors.grey[300]!),
-                                    onSelected: (_) => setState(() => _selectedCategoryFilter = isAll ? null : cat.name),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                );
-                              }),
                             ]),
+                            if (categories.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                height: 36,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: categories.length + 1,
+                                  separatorBuilder: (_, __) => const SizedBox(width: 6),
+                                  itemBuilder: (ctx, i) {
+                                    final cat = i == 0 ? null : categories[i - 1];
+                                    final isAll = cat == null;
+                                    final label = isAll ? 'All Categories' : cat.name;
+                                    final isSelected = _selectedCategoryFilter == (isAll ? null : cat.name);
+                                    return ChoiceChip(
+                                      label: Text(
+                                        label,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                          color: isSelected ? Colors.white : blue,
+                                        ),
+                                      ),
+                                      selected: isSelected,
+                                      selectedColor: blue,
+                                      backgroundColor: Colors.white,
+                                      side: BorderSide(color: isSelected ? blue : Colors.grey[300]!),
+                                      onSelected: (_) => setState(() => _selectedCategoryFilter = isAll ? null : cat.name),
+                                      visualDensity: VisualDensity.compact,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -518,115 +538,126 @@ class _SalesScreenState extends State<SalesScreen> {
                             )
                           : Card(
                               clipBehavior: Clip.antiAlias,
-                              child: Column(children: [
-                                // Table header
-                                Container(
-                                  color: Colors.grey.withValues(alpha: 0.06),
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                  child: Row(children: [
-                                    const SizedBox(width: 30, child: Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                                    const Expanded(flex: 3, child: Text('Product', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                                    const SizedBox(width: 110, child: Text('SKU', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                                    const SizedBox(width: 100, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                                    const SizedBox(width: 90, child: Text('Unit Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.right)),
-                                    const SizedBox(width: 70, child: Text('Discount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                                    const SizedBox(width: 70, child: Text('Tax', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
-                                    const SizedBox(width: 90, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.right)),
-                                    const SizedBox(width: 40),
-                                  ]),
-                                ),
-                                const Divider(height: 1),
-                                // Table rows
-                                Expanded(
-                                  child: ListView.separated(
-                                    itemCount: sp.currentItems.length,
-                                    separatorBuilder: (_, __) => const Divider(height: 1),
-                                    itemBuilder: (ctx, idx) {
-                                      final i = sp.currentItems[idx];
-                                      return Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                        child: Row(children: [
-                                          SizedBox(width: 30, child: Text('${idx + 1}', style: TextStyle(color: Colors.grey[600], fontSize: 13))),
-                                          Expanded(flex: 3, child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(i.productName ?? i.variantSku ?? '-', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
-                                              if (i.isTinted) Text('🎨 ${i.shadeCode} - ${i.shadeName ?? ''}', style: TextStyle(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.w500)),
-                                            ],
-                                          )),
-                                          SizedBox(width: 110, child: Text(i.variantSku ?? '-', style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.grey[600]))),
-                                          SizedBox(width: 100, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                            InkWell(
-                                              onTap: i.quantity > 1 ? () => sp.updateQty(idx, i.quantity - 1) : null,
-                                              child: Container(
-                                                width: 26, height: 26,
-                                                decoration: BoxDecoration(color: blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                                                child: Icon(Icons.remove, size: 16, color: i.quantity > 1 ? blue : Colors.grey),
-                                              ),
-                                            ),
-                                            SizedBox(width: 32, child: Text(
-                                              i.quantity == i.quantity.toInt() ? i.quantity.toInt().toString() : i.quantity.toString(),
-                                              textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                                            )),
-                                            InkWell(
-                                              onTap: () => sp.updateQty(idx, i.quantity + 1),
-                                              child: Container(
-                                                width: 26, height: 26,
-                                                decoration: BoxDecoration(color: blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                                                child: Icon(Icons.add, size: 16, color: blue),
-                                              ),
-                                            ),
-                                          ])),
-                                          SizedBox(width: 90, child: Text('₹ ${i.price.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
-                                          SizedBox(width: 70, child: Text(
-                                            i.discount > 0 ? '₹${i.discount.toStringAsFixed(0)}' : '0%',
-                                            textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: i.discount > 0 ? Colors.red : Colors.grey[500]),
-                                          )),
-                                          SizedBox(width: 70, child: Text(
-                                            '₹${i.tax.toStringAsFixed(0)}',
-                                            textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                                          )),
-                                          SizedBox(width: 90, child: Text('₹ ${i.totalWithTinting.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
-                                          SizedBox(width: 40, child: PopupMenuButton<String>(
-                                            icon: Icon(Icons.more_horiz, size: 20, color: Colors.grey[600]),
-                                            padding: EdgeInsets.zero,
-                                            onSelected: (val) {
-                                              if (val == 'price') {
-                                                final ctrl = TextEditingController(text: i.price.toStringAsFixed(2));
-                                                showDialog(context: context, builder: (ctx) => AlertDialog(
-                                                  title: Text('Override Unit Price: ${i.productName}', style: const TextStyle(fontSize: 16)),
-                                                  content: TextField(controller: ctrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'New Base Price (Before Tax)', prefixText: '₹ '), autofocus: true),
-                                                  actions: [
-                                                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                                                    FilledButton(onPressed: () { final p = double.tryParse(ctrl.text); if (p != null) sp.updatePrice(idx, p); Navigator.pop(ctx, true); }, child: const Text('Update')),
-                                                  ],
-                                                ));
-                                              } else if (val == 'discount') {
-                                                final ctrl = TextEditingController(text: i.discount > 0 ? i.discount.toStringAsFixed(2) : '');
-                                                showDialog(context: context, builder: (ctx) => AlertDialog(
-                                                  title: Text('Item Discount: ${i.productName}', style: const TextStyle(fontSize: 16)),
-                                                  content: TextField(controller: ctrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Row Discount Amount', prefixText: '₹ '), autofocus: true),
-                                                  actions: [
-                                                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                                                    FilledButton(onPressed: () { sp.updateItemDiscount(idx, double.tryParse(ctrl.text) ?? 0); Navigator.pop(ctx, true); }, child: const Text('Apply')),
-                                                  ],
-                                                ));
-                                              } else if (val == 'remove') {
-                                                sp.removeItem(idx);
-                                              }
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final tableWidth = constraints.maxWidth < 700 ? 700.0 : constraints.maxWidth;
+                                  return SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: SizedBox(
+                                      width: tableWidth,
+                                      child: Column(children: [
+                                        // Table header
+                                        Container(
+                                          color: Colors.grey.withValues(alpha: 0.06),
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                          child: Row(children: [
+                                            const SizedBox(width: 30, child: Text('#', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                                            const Expanded(flex: 3, child: Text('Product', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                                            const SizedBox(width: 110, child: Text('SKU', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                                            const SizedBox(width: 100, child: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                                            const SizedBox(width: 90, child: Text('Unit Price', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.right)),
+                                            const SizedBox(width: 70, child: Text('Discount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                                            const SizedBox(width: 70, child: Text('Tax', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center)),
+                                            const SizedBox(width: 90, child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.right)),
+                                            const SizedBox(width: 40),
+                                          ]),
+                                        ),
+                                        const Divider(height: 1),
+                                        // Table rows
+                                        Expanded(
+                                          child: ListView.separated(
+                                            itemCount: sp.currentItems.length,
+                                            separatorBuilder: (_, __) => const Divider(height: 1),
+                                            itemBuilder: (ctx, idx) {
+                                              final i = sp.currentItems[idx];
+                                              return Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                child: Row(children: [
+                                                  SizedBox(width: 30, child: Text('${idx + 1}', style: TextStyle(color: Colors.grey[600], fontSize: 13))),
+                                                  Expanded(flex: 3, child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(i.productName ?? i.variantSku ?? '-', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                                                      if (i.isTinted) Text('🎨 ${i.shadeCode} - ${i.shadeName ?? ''}', style: TextStyle(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.w500)),
+                                                    ],
+                                                  )),
+                                                  SizedBox(width: 110, child: Text(i.variantSku ?? '-', style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.grey[600]))),
+                                                  SizedBox(width: 100, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                                    InkWell(
+                                                      onTap: i.quantity > 1 ? () => sp.updateQty(idx, i.quantity - 1) : null,
+                                                      child: Container(
+                                                        width: 26, height: 26,
+                                                        decoration: BoxDecoration(color: blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                                                        child: Icon(Icons.remove, size: 16, color: i.quantity > 1 ? blue : Colors.grey),
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 32, child: Text(
+                                                      i.quantity == i.quantity.toInt() ? i.quantity.toInt().toString() : i.quantity.toString(),
+                                                      textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                                                    )),
+                                                    InkWell(
+                                                      onTap: () => sp.updateQty(idx, i.quantity + 1),
+                                                      child: Container(
+                                                        width: 26, height: 26,
+                                                        decoration: BoxDecoration(color: blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                                                        child: Icon(Icons.add, size: 16, color: blue),
+                                                      ),
+                                                    ),
+                                                  ])),
+                                                  SizedBox(width: 90, child: Text('₹ ${i.price.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                                                  SizedBox(width: 70, child: Text(
+                                                    i.discount > 0 ? '₹${i.discount.toStringAsFixed(0)}' : '0%',
+                                                    textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: i.discount > 0 ? Colors.red : Colors.grey[500]),
+                                                  )),
+                                                  SizedBox(width: 70, child: Text(
+                                                    '₹${i.tax.toStringAsFixed(0)}',
+                                                    textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                                  )),
+                                                  SizedBox(width: 90, child: Text('₹ ${i.totalWithTinting.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+                                                  SizedBox(width: 40, child: PopupMenuButton<String>(
+                                                    icon: Icon(Icons.more_horiz, size: 20, color: Colors.grey[600]),
+                                                    padding: EdgeInsets.zero,
+                                                    onSelected: (val) {
+                                                      if (val == 'price') {
+                                                        final ctrl = TextEditingController(text: i.price.toStringAsFixed(2));
+                                                        showDialog(context: context, builder: (ctx) => AlertDialog(
+                                                          title: Text('Override Unit Price: ${i.productName}', style: const TextStyle(fontSize: 16)),
+                                                          content: TextField(controller: ctrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'New Base Price (Before Tax)', prefixText: '₹ '), autofocus: true),
+                                                          actions: [
+                                                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                                                            FilledButton(onPressed: () { final p = double.tryParse(ctrl.text); if (p != null) sp.updatePrice(idx, p); Navigator.pop(ctx, true); }, child: const Text('Update')),
+                                                          ],
+                                                        ));
+                                                      } else if (val == 'discount') {
+                                                        final ctrl = TextEditingController(text: i.discount > 0 ? i.discount.toStringAsFixed(2) : '');
+                                                        showDialog(context: context, builder: (ctx) => AlertDialog(
+                                                          title: Text('Item Discount: ${i.productName}', style: const TextStyle(fontSize: 16)),
+                                                          content: TextField(controller: ctrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Row Discount Amount', prefixText: '₹ '), autofocus: true),
+                                                          actions: [
+                                                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                                                            FilledButton(onPressed: () { sp.updateItemDiscount(idx, double.tryParse(ctrl.text) ?? 0); Navigator.pop(ctx, true); }, child: const Text('Apply')),
+                                                          ],
+                                                        ));
+                                                      } else if (val == 'remove') {
+                                                        sp.removeItem(idx);
+                                                      }
+                                                    },
+                                                    itemBuilder: (_) => [
+                                                      const PopupMenuItem(value: 'price', child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Edit Price')])),
+                                                      const PopupMenuItem(value: 'discount', child: Row(children: [Icon(Icons.discount, size: 16), SizedBox(width: 8), Text('Add Discount')])),
+                                                      const PopupMenuItem(value: 'remove', child: Row(children: [Icon(Icons.delete_outline, size: 16, color: Colors.red), SizedBox(width: 8), Text('Remove', style: TextStyle(color: Colors.red))])),
+                                                    ],
+                                                  )),
+                                                ]),
+                                              );
                                             },
-                                            itemBuilder: (_) => [
-                                              const PopupMenuItem(value: 'price', child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Edit Price')])),
-                                              const PopupMenuItem(value: 'discount', child: Row(children: [Icon(Icons.discount, size: 16), SizedBox(width: 8), Text('Add Discount')])),
-                                              const PopupMenuItem(value: 'remove', child: Row(children: [Icon(Icons.delete_outline, size: 16, color: Colors.red), SizedBox(width: 8), Text('Remove', style: TextStyle(color: Colors.red))])),
-                                            ],
-                                          )),
-                                        ]),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ]),
+                                          ),
+                                        ),
+                                      ]),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                     ),
 
@@ -681,7 +712,7 @@ class _SalesScreenState extends State<SalesScreen> {
 
                     // ── Bottom: Customer Details + Notes ──
                     SizedBox(
-                      height: 140,
+                      height: 155,
                       child: Row(children: [
                         // Customer Details
                         Expanded(

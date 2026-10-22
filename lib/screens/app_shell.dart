@@ -14,6 +14,7 @@ import 'supplier_ledger_screen.dart';
 
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/product_provider.dart';
 
 import 'reports_screen.dart';
 import 'day_book_screen.dart';
@@ -79,14 +80,22 @@ class _AppShellState extends State<AppShell> {
 
     void navigateTo(String label) {
       final idx = _items.indexWhere((i) => i['label'] == label);
-      if (idx >= 0) setState(() => _selected = idx);
+      if (idx >= 0) {
+        if (_selected != idx) {
+          context.read<ProductProvider>().resetFilters(reload: false);
+        }
+        setState(() => _selected = idx);
+      }
     }
 
     Widget buildScreen(int originalIndex) {
       if (originalIndex == 0) {
-        return DashboardScreen(onNavigate: navigateTo);
+        return DashboardScreen(key: const ValueKey('dashboard'), onNavigate: navigateTo);
       }
-      return _screenWidgets[originalIndex - 1];
+      return KeyedSubtree(
+        key: ValueKey(originalIndex),
+        child: _screenWidgets[originalIndex - 1],
+      );
     }
 
     return Scaffold(
@@ -132,7 +141,16 @@ class _AppShellState extends State<AppShell> {
                       borderRadius: BorderRadius.circular(10),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(10),
-                        onTap: () => setState(() => _selected = i),
+                        onTap: () {
+                          if (_selected == i) {
+                            if (_items[i]['label'] == 'Products') {
+                              context.read<ProductProvider>().resetFilters(reload: true);
+                            }
+                          } else {
+                            context.read<ProductProvider>().resetFilters(reload: false);
+                            setState(() => _selected = i);
+                          }
+                        },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           child: Row(children: [

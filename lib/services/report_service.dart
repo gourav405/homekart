@@ -5,26 +5,43 @@ class MarginReportRow {
   final double netRevenue;
   final double totalCost;
   final double grossProfit;
+  final double expenses;
 
   MarginReportRow(
     this.label,
     this.netRevenue,
     this.totalCost,
-    this.grossProfit,
-  );
+    this.grossProfit, {
+    this.expenses = 0.0,
+  });
+
+  double get netProfit => grossProfit - expenses;
   double get marginPercent =>
       netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0.0;
+  double get netMarginPercent =>
+      netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0.0;
 }
 
 class MarginReport {
   final double netRevenue;
   final double totalCost;
   final double grossProfit;
+  final double totalExpenses;
   final List<MarginReportRow> rows;
 
-  MarginReport(this.netRevenue, this.totalCost, this.grossProfit, this.rows);
+  MarginReport(
+    this.netRevenue,
+    this.totalCost,
+    this.grossProfit,
+    this.rows, {
+    this.totalExpenses = 0.0,
+  });
+
+  double get netProfit => grossProfit - totalExpenses;
   double get marginPercent =>
       netRevenue > 0 ? (grossProfit / netRevenue) * 100 : 0.0;
+  double get netMarginPercent =>
+      netRevenue > 0 ? (netProfit / netRevenue) * 100 : 0.0;
 }
 
 class ReportService {
@@ -187,25 +204,90 @@ class ReportService {
 
     final res = await _db.query(query, params);
 
+    // ── Operating Expenses Query ──
+    double totalExpenses = 0;
+    Map<String, double> expensesByLabel = {};
+
+    if (invoiceNumber == null || invoiceNumber.trim().isEmpty) {
+      String expDateClause = "1=1";
+      String expSelectLabel = "";
+      String expGroupBy = "";
+      Map<String, dynamic> expParams = {};
+
+      if (startDate != null && endDate != null) {
+        expDateClause = "DATE(expense_date) >= :start AND DATE(expense_date) <= :end";
+        expParams['start'] = "${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}";
+        expParams['end'] = "${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}";
+
+        final days = endDate.difference(startDate).inDays;
+        if (days <= 60) {
+          expGroupBy = "DATE(expense_date)";
+          expSelectLabel = 'DATE_FORMAT(expense_date, "%d %b %Y")';
+        } else {
+          expGroupBy = 'DATE_FORMAT(expense_date, "%Y-%m")';
+          expSelectLabel = 'DATE_FORMAT(expense_date, "%b %Y")';
+        }
+      } else {
+        expDateClause = "MONTH(expense_date) = MONTH(CURDATE()) AND YEAR(expense_date) = YEAR(CURDATE())";
+        expGroupBy = "DATE(expense_date)";
+        expSelectLabel = 'DATE_FORMAT(expense_date, "%d %b %Y")';
+      }
+
+      try {
+        final expTotalRes = await _db.query(
+          "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE $expDateClause",
+          expParams,
+        );
+        if (expTotalRes.rows.isNotEmpty) {
+          totalExpenses = double.tryParse(expTotalRes.rows.first.assoc()['total'] ?? '0') ?? 0.0;
+        }
+
+        if (groupByMode == 'date') {
+          final expBreakdownRes = await _db.query(
+            "SELECT $expSelectLabel as label, $expGroupBy as period_key, SUM(amount) as total FROM expenses WHERE $expDateClause GROUP BY period_key ORDER BY period_key DESC",
+            expParams,
+          );
+          for (var r in expBreakdownRes.rows) {
+            final m = r.assoc();
+            final lbl = m['label'] ?? '';
+            final amt = double.tryParse(m['total'] ?? '0') ?? 0.0;
+            expensesByLabel[lbl] = amt;
+          }
+        }
+      } catch (_) {}
+    }
+
     double totalNetRev = 0;
     double totalCost = 0;
     double totalProfit = 0;
     List<MarginReportRow> rows = [];
+    Set<String> processedLabels = {};
 
     for (var row in res.rows) {
       final map = row.assoc();
+      final lbl = map['label'] ?? '';
+      processedLabels.add(lbl);
       final nr = double.tryParse(map['net_revenue'] ?? '0') ?? 0.0;
       final tc = double.tryParse(map['total_cost'] ?? '0') ?? 0.0;
       final gp = double.tryParse(map['gross_profit'] ?? '0') ?? 0.0;
+      final exp = expensesByLabel[lbl] ?? 0.0;
 
       totalNetRev += nr;
       totalCost += tc;
       totalProfit += gp;
 
-      rows.add(MarginReportRow(map['label'] ?? '', nr, tc, gp));
+      rows.add(MarginReportRow(lbl, nr, tc, gp, expenses: exp));
     }
 
-    return MarginReport(totalNetRev, totalCost, totalProfit, rows);
+    if (groupByMode == 'date') {
+      for (var entry in expensesByLabel.entries) {
+        if (!processedLabels.contains(entry.key)) {
+          rows.add(MarginReportRow(entry.key, 0.0, 0.0, 0.0, expenses: entry.value));
+        }
+      }
+    }
+
+    return MarginReport(totalNetRev, totalCost, totalProfit, rows, totalExpenses: totalExpenses);
   }
 
   Future<Map<String, List<List<dynamic>>>> getGstReportData(

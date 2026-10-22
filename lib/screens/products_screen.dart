@@ -24,24 +24,58 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
     _tabCtrl.addListener(() { if (_tabCtrl.index == 2 && !_tabCtrl.indexIsChanging) { context.read<ProductProvider>().loadMovements(); } });
     Future.microtask(() {
       final p = context.read<ProductProvider>();
-      _searchCtrl.text = p.searchQuery;
+      p.resetFilters(reload: false);
+      _searchCtrl.clear();
+      _movementTypeFilter = null;
       p.loadAll();
     });
   }
 
   @override
-  void dispose() { _tabCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _tabCtrl.dispose();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ProductProvider>(builder: (ctx, p, _) {
+      if (p.searchQuery.isEmpty && _searchCtrl.text.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _searchCtrl.text.isNotEmpty) {
+            _searchCtrl.clear();
+          }
+        });
+      }
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           SizedBox(width: double.infinity, child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 16, runSpacing: 16, alignment: WrapAlignment.spaceBetween, children: [
             const Text('Products & Inventory', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
             Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 12, runSpacing: 12, children: [
-              SizedBox(height: 48, width: 160, child: DropdownButtonFormField<int?>(isExpanded: true, decoration: const InputDecoration(border: OutlineInputBorder()), value: p.filterBrand, items: [const DropdownMenuItem(value: null, child: Text('All Brands')), ...p.brands.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name)))], onChanged: p.setFilterBrand)),
+              SizedBox(height: 48, width: 160, child: DropdownButtonFormField<int?>(isExpanded: true, decoration: const InputDecoration(border: OutlineInputBorder()), value: p.filterBrand, items: [const DropdownMenuItem(value: null, child: Text('All Brands')), ...p.brands.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name, overflow: TextOverflow.ellipsis)))], onChanged: p.setFilterBrand)),
+              SizedBox(height: 48, width: 180, child: DropdownButtonFormField<int?>(isExpanded: true, decoration: const InputDecoration(border: OutlineInputBorder()), value: p.filterCategory, items: [const DropdownMenuItem(value: null, child: Text('All Categories')), ...p.categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))], onChanged: p.setFilterCategory)),
+              if (p.filterCategory != null) ...[
+                Builder(builder: (context) {
+                  final subcatItems = p.subcategories.where((s) => s.categoryId == p.filterCategory).toList();
+                  final selectedSubId = subcatItems.any((s) => s.id == p.filterSubcategory) ? p.filterSubcategory : null;
+                  return SizedBox(
+                    height: 48,
+                    width: 200,
+                    child: DropdownButtonFormField<int?>(
+                      isExpanded: true,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      value: selectedSubId,
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('All Subcategories')),
+                        ...subcatItems.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis))),
+                      ],
+                      onChanged: p.setFilterSubcategory,
+                    ),
+                  );
+                }),
+              ],
               if (_tabCtrl.index == 2) ...[
                 SizedBox(height: 48, width: 160, child: DropdownButtonFormField<String?>(
                   isExpanded: true,
@@ -72,6 +106,16 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
                 )),
               ],
               SizedBox(height: 48, width: 300, child: TextField(controller: _searchCtrl, decoration: const InputDecoration(hintText: 'Search...', prefixIcon: Icon(Icons.search, size: 20), border: OutlineInputBorder()), onChanged: p.setSearch)),
+              if (p.filterBrand != null || p.filterCategory != null || p.filterSubcategory != null || p.searchQuery.isNotEmpty)
+                IconButton(
+                  tooltip: 'Clear Filters',
+                  icon: const Icon(Icons.filter_alt_off_outlined, color: Colors.red),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _movementTypeFilter = null);
+                    p.resetFilters(reload: true);
+                  },
+                ),
               if (_tabCtrl.index == 0)
                 SizedBox(height: 48, child: FilledButton.icon(onPressed: () => _showProductForm(p), icon: const Icon(Icons.add, size: 18), label: const Text('Add Product'))),
               if (_tabCtrl.index == 1)
@@ -511,7 +555,7 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
     int? subCatId = product?.subcategoryId;
     int? typeId = product?.typeId;
     bool isTintable = product?.isTintable ?? false;
-    bool isTaxInclusive = product?.isTaxInclusive ?? false;
+    bool isTaxInclusive = product?.isTaxInclusive ?? true;
     bool taxRemittable = product?.taxRemittable ?? true;
     bool isActive = product?.isActive ?? true;
     final formKey = GlobalKey<FormState>();
@@ -548,43 +592,27 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
           ])),
         ]),
         const SizedBox(height: 12),
-        Builder(
-          builder: (context) {
-            bool showTintable = false;
-            if (catId != null) {
-              try {
-                final cat = p.categories.firstWhere((c) => c.id == catId);
-                showTintable = cat.name.toLowerCase().contains('paint');
-              } catch (_) {}
-            }
-            if (!showTintable) isTintable = false;
-
-            return Row(children: [
-              if (showTintable) ...[
-                Expanded(child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(color: isTintable ? Colors.orange.withValues(alpha: 0.05) : null, borderRadius: BorderRadius.circular(8), border: Border.all(color: isTintable ? Colors.orange.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.2))),
-                  child: CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('🎨 Machine Tintable', style: TextStyle(fontSize: 13)),
-                    value: isTintable,
-                    onChanged: (v) => setDlgState(() => isTintable = v ?? false),
-                  ),
-                )),
-                const SizedBox(width: 12),
-              ],
-              Expanded(child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(color: isTaxInclusive ? Colors.blue.withValues(alpha: 0.05) : null, borderRadius: BorderRadius.circular(8), border: Border.all(color: isTaxInclusive ? Colors.blue.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.2))),
-                child: CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Tax Inclusive Price', style: TextStyle(fontSize: 13)),
-                  value: isTaxInclusive,
-                  onChanged: (v) => setDlgState(() => isTaxInclusive = v ?? false),
-                ),
-              )),
-            ]);
-          }
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(color: isTintable ? Colors.orange.withValues(alpha: 0.05) : null, borderRadius: BorderRadius.circular(8), border: Border.all(color: isTintable ? Colors.orange.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.2))),
+          child: CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('🎨 Machine Tintable', style: TextStyle(fontSize: 13)),
+            subtitle: const Text('Base that can be tinted on the machine', style: TextStyle(fontSize: 11)),
+            value: isTintable,
+            onChanged: (v) => setDlgState(() => isTintable = v ?? false),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(color: isTaxInclusive ? Colors.blue.withValues(alpha: 0.05) : null, borderRadius: BorderRadius.circular(8), border: Border.all(color: isTaxInclusive ? Colors.blue.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.2))),
+          child: CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Tax Inclusive Price', style: TextStyle(fontSize: 13)),
+            value: isTaxInclusive,
+            onChanged: (v) => setDlgState(() => isTaxInclusive = v ?? false),
+          ),
         ),
         const SizedBox(height: 12),
         Container(
@@ -622,14 +650,7 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
             }
           }
           
-          bool finalTintable = isTintable;
-          if (catId != null) {
-            try {
-              final cat = p.categories.firstWhere((c) => c.id == catId);
-              if (!cat.name.toLowerCase().contains('paint')) finalTintable = false;
-            } catch (_) {}
-          }
-          final pr = Product(id: product?.id, name: nameCtrl.text, sku: skuCtrl.text, hsnCode: hsnCtrl.text.isNotEmpty ? hsnCtrl.text : null, description: descCtrl.text.isNotEmpty ? descCtrl.text : null, brandId: brandId!, categoryId: catId!, subcategoryId: subCatId, typeId: typeId, isTintable: finalTintable, isTaxInclusive: isTaxInclusive, taxRemittable: taxRemittable, isActive: isActive);
+          final pr = Product(id: product?.id, name: nameCtrl.text, sku: skuCtrl.text, hsnCode: hsnCtrl.text.isNotEmpty ? hsnCtrl.text : null, description: descCtrl.text.isNotEmpty ? descCtrl.text : null, brandId: brandId!, categoryId: catId!, subcategoryId: subCatId, typeId: typeId, isTintable: isTintable, isTaxInclusive: isTaxInclusive, taxRemittable: taxRemittable, isActive: isActive);
           final ok = product == null ? await p.addProduct(pr) : await p.updateProduct(pr);
           if (ok && ctx.mounted) Navigator.pop(ctx);
         }, child: Text(product == null ? 'Add' : 'Save')),
@@ -703,15 +724,76 @@ class _ProductsScreenState extends State<ProductsScreen> with SingleTickerProvid
     int? unitId = source?.unitId;
     int? purchaseUnitId = source?.purchaseUnitId;
     int? colorId = source?.colorId;
-    int? taxId = source?.taxRateId;
+    int? taxId = source?.taxRateId ?? p.taxRates.where((t) => t.percentage == 18.0).firstOrNull?.id ?? 3;
     bool isActive = variant?.isActive ?? true; // Default to active for new batches even if template is inactive
     final formKey = GlobalKey<FormState>();
+    final productSearchCtrl = TextEditingController();
+    String productFilter = '';
 
     showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDlgState) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(variant == null ? 'Add Variant' : 'Edit Variant'),
       content: SizedBox(width: 520, child: Form(key: formKey, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        DropdownButtonFormField<int>(decoration: const InputDecoration(labelText: 'Product *'), value: productId, items: p.products.map((pr) => DropdownMenuItem(value: pr.id, child: Text(pr.name))).toList(), onChanged: variant != null ? null : (v) => setDlgState(() => productId = v), validator: (v) => v == null ? 'Required' : null),
+        Builder(builder: (context) {
+          final allList = p.allProducts.isNotEmpty ? p.allProducts : p.products;
+          final filteredProducts = allList.where((pr) {
+            if (pr.id == productId) return true;
+            if (productFilter.isEmpty) return true;
+            final q = productFilter.toLowerCase();
+            return pr.name.toLowerCase().contains(q) ||
+                   (pr.brandName?.toLowerCase().contains(q) ?? false) ||
+                   pr.sku.toLowerCase().contains(q);
+          }).toList();
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (variant == null && allList.length > 10) ...[
+                TextField(
+                  controller: productSearchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Quick search product by name/brand...',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    suffixIcon: productFilter.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () {
+                              productSearchCtrl.clear();
+                              setDlgState(() => productFilter = '');
+                            },
+                          )
+                        : null,
+                  ),
+                  onChanged: (v) => setDlgState(() => productFilter = v),
+                ),
+                const SizedBox(height: 8),
+              ],
+              DropdownButtonFormField<int>(
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Product *'),
+                value: productId,
+                items: filteredProducts.map((pr) {
+                  final brandText = pr.brandName != null && pr.brandName!.isNotEmpty
+                      ? ' (${pr.brandName})'
+                      : '';
+                  return DropdownMenuItem(
+                    value: pr.id,
+                    child: Text(
+                      '${pr.name}$brandText',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: variant != null ? null : (v) => setDlgState(() => productId = v),
+                validator: (v) => v == null ? 'Required' : null,
+              ),
+            ],
+          );
+        }),
         const SizedBox(height: 12),
         Row(children: [
           Expanded(child: TextFormField(controller: skuCtrl, decoration: const InputDecoration(labelText: 'SKU *'), validator: (v) => v == null || v.isEmpty ? 'Required' : null)),

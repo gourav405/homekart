@@ -12,6 +12,7 @@ import '../models/inventory.dart';
 class ProductProvider extends ChangeNotifier {
   final ProductService _svc = ProductService();
   List<Product> _products = [];
+  List<Product> _allProducts = [];
   List<ProductVariant> _variants = [];
   List<Brand> _brands = [];
   List<Category> _categories = [];
@@ -25,14 +26,17 @@ class ProductProvider extends ChangeNotifier {
   String _search = '';
   int? _filterBrand;
   int? _filterCategory;
+  int? _filterSubcategory;
   bool? _filterVariantStatus = true; // true = Active, false = Discontinued, null = All
   
   int? get filterBrand => _filterBrand;
   int? get filterCategory => _filterCategory;
+  int? get filterSubcategory => _filterSubcategory;
   bool? get filterVariantStatus => _filterVariantStatus;
   String get searchQuery => _search;
 
   List<Product> get products => _products;
+  List<Product> get allProducts => _allProducts;
   List<ProductVariant> get variants => _variants;
   List<Brand> get brands => _brands;
   List<Category> get categories => _categories;
@@ -64,12 +68,13 @@ class ProductProvider extends ChangeNotifier {
       _units = await _svc.getUnits();
       _colors = await _svc.getColors();
       _taxRates = await _svc.getTaxRates();
+      _allProducts = await _svc.getProductList();
       
-      final pRes = await _svc.getAllProducts(search: _search.isNotEmpty ? _search : null, brandId: _filterBrand, categoryId: _filterCategory, limit: 20, offset: (_productsPage - 1) * 20);
+      final pRes = await _svc.getAllProducts(search: _search.isNotEmpty ? _search : null, brandId: _filterBrand, categoryId: _filterCategory, subcategoryId: _filterSubcategory, limit: 20, offset: (_productsPage - 1) * 20);
       _products = pRes.$1;
       _productsTotal = pRes.$2;
       
-      final vRes = await _svc.getVariants(search: _search.isNotEmpty ? _search : null, limit: 20, offset: (_variantsPage - 1) * 20);
+      final vRes = await _svc.getVariants(search: _search.isNotEmpty ? _search : null, brandId: _filterBrand, categoryId: _filterCategory, subcategoryId: _filterSubcategory, isActive: _filterVariantStatus, limit: 20, offset: (_variantsPage - 1) * 20);
       _variants = vRes.$1;
       _variantsTotal = vRes.$2;
     } catch (e) { _error = e.toString(); }
@@ -78,7 +83,8 @@ class ProductProvider extends ChangeNotifier {
 
   Future<void> loadProducts() async {
     try { 
-      final pRes = await _svc.getAllProducts(search: _search.isNotEmpty ? _search : null, brandId: _filterBrand, categoryId: _filterCategory, limit: 20, offset: (_productsPage - 1) * 20); 
+      _allProducts = await _svc.getProductList();
+      final pRes = await _svc.getAllProducts(search: _search.isNotEmpty ? _search : null, brandId: _filterBrand, categoryId: _filterCategory, subcategoryId: _filterSubcategory, limit: 20, offset: (_productsPage - 1) * 20); 
       _products = pRes.$1;
       _productsTotal = pRes.$2;
       notifyListeners(); 
@@ -87,7 +93,7 @@ class ProductProvider extends ChangeNotifier {
 
   Future<void> loadVariants({int? productId}) async {
     try { 
-      final vRes = await _svc.getVariants(productId: productId, brandId: _filterBrand, categoryId: _filterCategory, isActive: _filterVariantStatus, search: _search.isNotEmpty ? _search : null, limit: 20, offset: (_variantsPage - 1) * 20); 
+      final vRes = await _svc.getVariants(productId: productId, brandId: _filterBrand, categoryId: _filterCategory, subcategoryId: _filterSubcategory, isActive: _filterVariantStatus, search: _search.isNotEmpty ? _search : null, limit: 20, offset: (_variantsPage - 1) * 20); 
       _variants = vRes.$1;
       _variantsTotal = vRes.$2;
       notifyListeners(); 
@@ -99,8 +105,20 @@ class ProductProvider extends ChangeNotifier {
 
   void setSearch(String s) { _search = s; _productsPage = 1; _variantsPage = 1; _movementsPage = 1; loadProducts(); loadVariants(); loadMovements(); }
   void setFilterBrand(int? id) { _filterBrand = id; _productsPage = 1; _variantsPage = 1; _movementsPage = 1; loadProducts(); loadVariants(); loadMovements(); }
-  void setFilterCategory(int? id) { _filterCategory = id; _productsPage = 1; _variantsPage = 1; loadProducts(); loadVariants(); }
+  void setFilterCategory(int? id) { _filterCategory = id; _filterSubcategory = null; _productsPage = 1; _variantsPage = 1; loadProducts(); loadVariants(); }
+  void setFilterSubcategory(int? id) { _filterSubcategory = id; _productsPage = 1; _variantsPage = 1; loadProducts(); loadVariants(); }
   void setFilterVariantStatus(bool? val) { _filterVariantStatus = val; _variantsPage = 1; loadVariants(); }
+  void resetFilters({bool reload = true}) {
+    _filterBrand = null;
+    _filterCategory = null;
+    _filterSubcategory = null;
+    _filterVariantStatus = true;
+    _search = '';
+    _productsPage = 1;
+    _variantsPage = 1;
+    _movementsPage = 1;
+    if (reload) { loadProducts(); loadVariants(); loadMovements(); }
+  }
 
   Future<bool> addProduct(Product p) async { try { await _svc.createProduct(p); await loadProducts(); return true; } catch (e) { _error = e.toString(); notifyListeners(); return false; } }
   Future<bool> updateProduct(Product p) async { try { await _svc.updateProduct(p); await loadProducts(); return true; } catch (e) { _error = e.toString(); notifyListeners(); return false; } }
